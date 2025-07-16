@@ -114,11 +114,50 @@ function SignUp() {
     setIsVerifyingOtp(true);
     try {
       await axios.post('http://192.168.9.27:1337/verify-signup-otp', { email: emailForOtp, code });
-      alert('OTP verified! You can now complete your registration.');
-      setOtpVerified(true);
-      setOtpSent(false); // Hide OTP form, show registration
+      // Immediately create account after OTP verification
+      // Validate password length and match before creating account
+      if (formData.password.length < 8) {
+        alert("Password must be at least 8 characters long!");
+        setIsVerifyingOtp(false);
+        return;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        alert("Passwords don't match!");
+        setIsVerifyingOtp(false);
+        return;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        alert("Please enter a valid email address!");
+        setIsVerifyingOtp(false);
+        return;
+      }
+      // Check for existing username/email
+      const { data: users } = await axios.get("http://192.168.9.27:1337/fetchusers");
+      const usernameExists = users.some((user) => user.userName === formData.userName);
+      const emailExists = users.some((user) => user.email === formData.email);
+      if (usernameExists) {
+        alert("Username already exists!");
+        setIsVerifyingOtp(false);
+        return;
+      }
+      if (emailExists) {
+        alert("Email already registered!");
+        setIsVerifyingOtp(false);
+        return;
+      }
+      // Generate a unique userId
+      const generatedUserId = uuidv4();
+      const dataToSend = { ...formData };
+      delete dataToSend.confirmPassword;
+      dataToSend.role = 'customer';
+      dataToSend.userId = generatedUserId;
+      dataToSend.approved = false;
+      await axios.post("http://192.168.9.27:1337/addusers", dataToSend);
+      alert("Account created successfully! You can now log in.");
+      navigate('/login');
     } catch (error) {
-      alert(error.response?.data?.message || 'OTP verification failed.');
+      alert(error.response?.data?.message || 'OTP verification failed or account creation error.');
     }
     setIsVerifyingOtp(false);
   }
@@ -127,6 +166,11 @@ function SignUp() {
     event.preventDefault();
     if (!otpVerified) {
       alert('Please verify the OTP sent to your email before signing up.');
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      alert("Password must be at least 8 characters long!");
       return;
     }
 
@@ -297,14 +341,6 @@ function SignUp() {
                   </Button>
                 </>
               )}
-            </form>
-          )}
-          {/* Step 2: Registration (only after OTP verified) */}
-          {otpVerified && (
-            <form onSubmit={handleSignUp}>
-              <Button className="create" variant="contained" type="submit" startIcon={<PersonAddIcon />} fullWidth>
-                Create Account
-              </Button>
             </form>
           )}
           <div className="login-link">
